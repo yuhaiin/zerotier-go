@@ -14,9 +14,19 @@ jobs:
           - runner: ubuntu-24.04
             name: libztgo_linux_amd64.so
             optional: false
+          - runner: ubuntu-24.04-arm
+            name: libztgo_linux_arm64.so
+            optional: true
           - runner: macos-15
             name: libztgo_darwin_arm64.dylib
             optional: true
+          - runner: macos-15-intel
+            name: libztgo_darwin_amd64.dylib
+            optional: true
+          - runner: ubuntu-24.04
+            name: libztgo_android_arm64.so
+            optional: true
+            android: true
           - runner: windows-2022
             name: ztgo_windows_amd64.dll
             optional: true
@@ -49,6 +59,10 @@ jobs:
           # Upstream Linux x64 assembly was written for a static executable,
           # and R_X86_64_PC32 relocations are invalid in a shared object.
           sed -i.bak -e 's/set(ZT_USE_X64_ASM_ED25519 TRUE)/set(ZT_USE_X64_ASM_ED25519 FALSE)/' -e 's/set(ZT_USE_X64_ASM_SALSA TRUE)/set(ZT_USE_X64_ASM_SALSA FALSE)/' upstream/CMakeLists.txt
+          if [ "${{ matrix.android || false }}" = "true" ]; then
+            # Android target uses Bionic and does not need daemon-only OpenSSL.
+            sed -i.bak -e 's/(UNIX AND NOT APPLE))/(UNIX AND NOT APPLE AND NOT ANDROID))/' upstream/CMakeLists.txt
+          fi
       - name: Install nlohmann-json (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -63,7 +77,11 @@ jobs:
       - name: Configure and compile official MPL-only core
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = Windows ]; then
+          if [ "${{ matrix.android || false }}" = "true" ]; then
+            NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_LATEST_HOME:-}}"
+            test -d "$NDK/build/cmake"
+            cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
+          elif [ "$RUNNER_OS" = Windows ]; then
             cmake -S upstream -B upstream-build -G "Visual Studio 17 2022" -A x64 -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
           else
             cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
@@ -73,11 +91,11 @@ jobs:
           find upstream-build -type f \( -name 'libztgo.so' -o -name 'libztgo.dylib' -o -name 'ztgo.dll' \) -print -exec cp {} native/assets/${{ matrix.name }} \;
           test -s native/assets/${{ matrix.name }}
       - name: Go tests and native FFI smoke
-        if: runner.os != 'Windows'
+        if: matrix.android != true
         shell: bash
         run: |
           go mod tidy
-          go test -race ./...
+          if [ "$RUNNER_OS" = Windows ]; then go test ./...; else go test -race ./...; fi
           ZEROTIER_GO_TEST_LIBRARY="$(pwd)/native/assets/${{ matrix.name }}" go test -run TestNativeSmokeWhenAvailable -v ./...
       - uses: actions/upload-artifact@v4
         with:

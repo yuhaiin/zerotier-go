@@ -27,7 +27,7 @@ go get github.com/yuhaiin/zerotier-go
 
 `New` first looks for an embedded binary for the current GOOS/GOARCH. Supply `Config.LibraryPath` to use a custom-built library or Android's packaged native library. Source checkouts without any built native binaries still compile, but calling `New` returns `ErrNoNativeLibrary` with the expected filename. No made-up placeholder ELF files are shipped.
 
-On Linux/macOS/Windows the **Go module** is built with `CGO_ENABLED=0`. Native `.so`/`.dylib`/`.dll` binaries are *still required* at run time, compiled from C++. **Android may and normally does enable CGO in gomobile**. Android library loading usually needs APK `jniLibs`/system loader paths rather than extracting an embedded `.so` to app-writable storage (which Android's executable memory restrictions can prevent).
+On Linux/macOS/Windows the **Go module** is built with `CGO_ENABLED=0`. Native `.so`/`.dylib`/`.dll` binaries are *still required* at run time, compiled from C++. **Android may and normally does enable CGO in gomobile**. Android uses a native library installed with the APK as `jniLibs/arm64-v8a/libztgo.so`, loaded by name (`Config.LibraryPath` can override). `EmbeddedLibrary` provides the platform bundle to app build tools; Android executable memory restrictions often prohibit loading from an app-writable extracted temporary `.so`.
 
 ## Basic raw protocol example
 
