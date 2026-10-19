@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-add_library(ztgo SHARED ztgo.cpp)
+add_library(ztgo SHARED ztgo.cpp "${CMAKE_SOURCE_DIR}/osdep/OSUtils.cpp")
 target_include_directories(ztgo PRIVATE "${CMAKE_SOURCE_DIR}/include")
 target_compile_features(ztgo PRIVATE cxx_std_17)
 target_link_libraries(ztgo PRIVATE zerotier-core)

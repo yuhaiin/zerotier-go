@@ -43,6 +43,19 @@ jobs:
           git clone --filter=blob:none https://github.com/zerotier/ZeroTierOne.git upstream
           git -C upstream checkout 899352e38405968516bb12a770f0ac02f6058fa8
           printf '\nadd_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/bridge" "${CMAKE_CURRENT_BINARY_DIR}/ztgo-bridge")\n' >> upstream/CMakeLists.txt
+      - name: Prepare PIC-compatible crypto for shared library
+        shell: bash
+        run: |
+          # Upstream Linux x64 assembly was written for a static executable,
+          # and R_X86_64_PC32 relocations are invalid in a shared object.
+          sed -i.bak -e 's/set(ZT_USE_X64_ASM_ED25519 TRUE)/set(ZT_USE_X64_ASM_ED25519 FALSE)/' -e 's/set(ZT_USE_X64_ASM_SALSA TRUE)/set(ZT_USE_X64_ASM_SALSA FALSE)/' upstream/CMakeLists.txt
+      - name: Install nlohmann-json (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch v3.11.3 https://github.com/nlohmann/json.git upstream-json
+          cmake -S upstream-json -B json-build -G Ninja -DCMAKE_INSTALL_PREFIX="$(pwd)/upstream/.deps" -DJSON_BuildTests=OFF
+          cmake --install json-build
       - name: Bootstrap upstream OTel headers (required by ZeroTierOne CMake)
         shell: bash
         run: |
