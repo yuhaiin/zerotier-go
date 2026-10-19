@@ -110,6 +110,9 @@ jobs:
     needs: build
     if: always() && needs.build.result == 'success' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: zerotier-native-publish-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,12 +135,31 @@ jobs:
           go mod tidy
           go test ./...
           git status --short
-      - name: Commit source and verified native artifacts
+      - name: Publish verified native artifacts without racing main
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m 'build: publish source and official native bundles [skip ci]'
-            git push origin HEAD:main
-          fi
+          # Multiple builds may have started from different main commits.
+          # Preserve only the verified binaries, then always commit on the
+          # latest remote main. Never force-push or overwrite source changes.
+          mkdir -p "$RUNNER_TEMP/ztgo-publish"
+          cp -a native/assets/. "$RUNNER_TEMP/ztgo-publish/"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            cp -a "$RUNNER_TEMP/ztgo-publish/." native/assets/
+            git add native/assets
+            if git diff --cached --quiet; then
+              echo "Published native artifacts already match main"
+              exit 0
+            fi
+            git commit -m 'build: publish verified native bundles [skip ci]'
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep "$attempt"
+          done
+          echo "Could not publish after five non-force retries" >&2
+          exit 1
