@@ -197,6 +197,30 @@ func TestNativeSmokeWhenAvailable(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNativeDefaultEmbeddedLibrary(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("default embedded-library smoke is run on Linux")
+	}
+	if _, _, err := EmbeddedLibrary(); err != nil {
+		if errors.Is(err, ErrNoNativeLibrary) {
+			t.Skip("platform's native asset has not yet been published")
+		}
+		t.Fatal(err)
+	}
+	n, err := New(Config{Store: NewMemoryStore(), SendWire: func(WirePacket) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = n.Close() })
+	if address, err := n.Address(); err != nil || address == 0 {
+		t.Fatalf("address %x: %v", address, err)
+	}
+	if err := n.Join(1); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWaitForNetworkCancelled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
@@ -265,7 +289,13 @@ func TestEmbeddedLibraryHasNativeFileSignature(t *testing.T) {
 	name, data, err := EmbeddedLibrary()
 	if err != nil {
 		if errors.Is(err, ErrNoNativeLibrary) {
+			if _, statErr := os.Stat(filepath.Join("native", "assets", libraryName())); statErr == nil {
+				t.Fatalf("native library exists but was not embedded: %s", libraryName())
+			}
 			t.Skip("platform's native asset has not yet been published")
+		}
+		if errors.Is(err, ErrUnsupportedPlatform) {
+			t.Skip("unsupported native platform")
 		}
 		t.Fatal(err)
 	}
@@ -294,11 +324,16 @@ func TestEmbeddedLibraryHasNativeFileSignature(t *testing.T) {
 	}
 }
 func okNativeHeader(data []byte) bool {
-	if len(data) < 4 { return false }
+	if len(data) < 4 {
+		return false
+	}
 	switch runtime.GOOS {
-	case "linux", "android": return bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'})
-	case "windows": return bytes.HasPrefix(data, []byte{'M', 'Z'})
-	case "darwin": return bytes.HasPrefix(data, []byte{0xcf, 0xfa, 0xed, 0xfe}) || bytes.HasPrefix(data, []byte{0xca, 0xfe, 0xba, 0xbe})
+	case "linux", "android":
+		return bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'})
+	case "windows":
+		return bytes.HasPrefix(data, []byte{'M', 'Z'})
+	case "darwin":
+		return bytes.HasPrefix(data, []byte{0xcf, 0xfa, 0xed, 0xfe}) || bytes.HasPrefix(data, []byte{0xca, 0xfe, 0xba, 0xbe})
 	}
 	return false
 }
@@ -348,7 +383,9 @@ func BenchmarkNativeAddress(b *testing.B) {
 		b.Skip("set ZEROTIER_GO_TEST_LIBRARY to an official native bridge")
 	}
 	n, err := New(Config{LibraryPath: path, SendWire: func(WirePacket) error { return nil }})
-	if err != nil { b.Fatal(err) }
+	if err != nil {
+		b.Fatal(err)
+	}
 	defer n.Close()
 	b.ReportAllocs()
 	b.ResetTimer()

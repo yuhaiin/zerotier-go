@@ -1,6 +1,7 @@
 package zerotier
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"runtime"
@@ -52,5 +53,5 @@ func EmbeddedLibrary() (string, []byte, error) {
 	if len(bundledBytes) == 0 {
 		return "", nil, fmt.Errorf("%w: %s", ErrNoNativeLibrary, bundledName)
 	}
-	return bundledName, bundledBytes, nil
+	return bundledName, bytes.Clone(bundledBytes), nil
 }

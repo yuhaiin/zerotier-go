@@ -8,8 +8,9 @@ import "embed"
 // The NOTICE makes source-only go builds valid, without fake executable bytes.
 //
 //go:embed native/assets/android_arm64/*
+//go:embed native/assets/libztgo_android_arm64.so
 var platformAssets embed.FS
 
-var bundledBytes, _ = platformAssets.ReadFile("native/assets/android_arm64/libztgo_android_arm64.so")
+var bundledBytes, _ = platformAssets.ReadFile("native/assets/libztgo_android_arm64.so")
 
 const bundledName = "libztgo_android_arm64.so"
