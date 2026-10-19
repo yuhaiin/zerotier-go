@@ -63,8 +63,12 @@ jobs:
       - name: Configure and compile official MPL-only core
         shell: bash
         run: |
-          cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
-          cmake --build upstream-build --target ztgo --parallel 4
+          if [ "$RUNNER_OS" = Windows ]; then
+            cmake -S upstream -B upstream-build -G "Visual Studio 17 2022" -A x64 -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
+          else
+            cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
+          fi
+          cmake --build upstream-build --target ztgo --config Release --parallel 4
           mkdir -p native/assets
           find upstream-build -type f \( -name 'libztgo.so' -o -name 'libztgo.dylib' -o -name 'ztgo.dll' \) -print -exec cp {} native/assets/${{ matrix.name }} \;
           test -s native/assets/${{ matrix.name }}

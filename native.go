@@ -144,7 +144,7 @@ func onStatePut(user uintptr, typ int32, id0, id1 uint64, ptr uintptr, length in
 	if n == nil {
 		return
 	}
-	key := StateKey{Type: typ, ID: [2]uint64{id0, id1}}
+	key := normalizeStateKey(StateKey{Type: typ, ID: [2]uint64{id0, id1}})
 	var err error
 	if length < 0 {
 		err = n.cfg.Store.Delete(key)
@@ -162,7 +162,7 @@ func onStateGet(user uintptr, typ int32, id0, id1 uint64, ptr uintptr, size uint
 	if n == nil {
 		return -1
 	}
-	b, err := n.cfg.Store.Get(StateKey{Type: typ, ID: [2]uint64{id0, id1}})
+	b, err := n.cfg.Store.Get(normalizeStateKey(StateKey{Type: typ, ID: [2]uint64{id0, id1}}))
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			n.setStoreError(err)
@@ -301,3 +301,13 @@ func nativeCallError(op string, code int32) error {
 	return fmt.Errorf("zerotier: %s returned native error %d", op, code)
 }
 func keepNativeAlive(v any) { runtime.KeepAlive(v) }
+
+// Identity and planet are singleton state objects. The core first reads each
+// with ID 0 but subsequently writes them with their actual node/world ID.
+// Keying these stores by the raw ID silently regenerates the node identity.
+func normalizeStateKey(k StateKey) StateKey {
+	if k.Type == 1 || k.Type == 2 || k.Type == 3 {
+		k.ID = [2]uint64{}
+	}
+	return k
+}
