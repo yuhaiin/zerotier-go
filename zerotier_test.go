@@ -308,7 +308,7 @@ func TestRejectedConfigDoesNotBecomeReady(t *testing.T) {
 	activeNodes.Store(n.token, n)
 	defer activeNodes.Delete(n.token)
 	c := &cConfig{NetworkID: 123, Status: uint32(NetworkOK), Operation: uint32(NetworkUp), MTU: 2800}
-	if result := onConfig(n.token, uintptr(unsafe.Pointer(c))); result == 0 {
+	if result := onConfig(n.token, unsafe.Pointer(c)); result == 0 {
 		t.Fatal("accepted a config despite a full callback queue")
 	}
 	if _, ok := n.Network(123); ok {

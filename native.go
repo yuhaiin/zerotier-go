@@ -202,12 +202,12 @@ func onFrame(user, frame uintptr) {
 	}
 	_ = n.offer(task{frame: &Frame{NetworkID: NetworkID(f.NetworkID), SourceMAC: f.SourceMAC, DestinationMAC: f.DestinationMAC, EtherType: uint16(f.EtherType), VLAN: uint16(f.VLAN), Data: ptrBytes(uintptr(f.Data), f.Length)}})
 }
-func onConfig(user, view uintptr) int32 {
+func onConfig(user uintptr, view unsafe.Pointer) int32 {
 	n := lookup(user)
-	if n == nil || view == 0 {
+	if n == nil || view == nil {
 		return -1
 	}
-	cfg := (*cConfig)(unsafe.Pointer(view)).snapshot()
+	cfg := (*cConfig)(view).snapshot()
 	n.netMu.Lock()
 	previous, existed := n.networks[cfg.ID]
 	if cfg.Operation == NetworkDestroyed {
