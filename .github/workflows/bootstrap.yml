@@ -27,6 +27,8 @@ jobs:
           rmdir .bootstrap 2>/dev/null || true
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # GITHUB_TOKEN has no workflow-file write scope; native.yml is updated separately via GitHub connection.
+          git restore -- .github/workflows/native.yml
           git add -A
           git commit -m 'feat: secure per-platform native loader, MTU and mandatory real-link CI [skip ci]'
           git push origin HEAD:main
