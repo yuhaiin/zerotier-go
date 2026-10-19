@@ -185,6 +185,16 @@ func verifyNativePath(path string) error {
 		if attr&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
 			return fmt.Errorf("reparse-point path %q rejected", part)
 		}
+		// The volume root is managed by Windows / the volume provisioner,
+		// not necessarily by the process user or a privileged SID. GitHub's
+		// Windows runner, for example, gives D:\\ to NETWORK SERVICE.
+		// Keep the reparse-point checks above, but do not infer whether the
+		// volume is trustworthy from its owner SID. Files and non-root
+		// directories still require a trusted owner.
+		parent := filepath.Dir(part)
+		if parent == part {
+			break
+		}
 		// System and Administrators can own trusted installed directories; native
 		// library files must be owned by current user or a privileged principal.
 		owner, err := ownerSID(part)
@@ -197,10 +207,6 @@ func verifyNativePath(path string) error {
 		}
 		if owner != current && owner != "S-1-5-18" && owner != "S-1-5-32-544" {
 			return fmt.Errorf("untrusted owner %s on %q", owner, part)
-		}
-		parent := filepath.Dir(part)
-		if parent == part {
-			break
 		}
 		part = parent
 	}
