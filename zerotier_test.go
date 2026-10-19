@@ -329,3 +329,33 @@ func TestWaitForNetworkRejectsDownOperation(t *testing.T) {
 		t.Fatalf("down network incorrectly reported ready: %v", err)
 	}
 }
+
+func TestNativeCallbackRegistration(t *testing.T) {
+	// In particular, Windows purego requires pointer-sized return values
+	// even for callbacks whose C signatures return void.
+	registerCallbacks()
+	if callbacks.Put == 0 || callbacks.Get == 0 || callbacks.Wire == 0 ||
+		callbacks.Frame == 0 || callbacks.Config == 0 || callbacks.Event == 0 {
+		t.Fatal("missing ZeroTier FFI callback")
+	}
+}
+
+// BenchmarkNativeAddress measures a real purego -> C++ ABI call. It does not
+// require a reachable ZeroTier network, so it is reproducible on CI runners.
+func BenchmarkNativeAddress(b *testing.B) {
+	path := os.Getenv("ZEROTIER_GO_TEST_LIBRARY")
+	if path == "" {
+		b.Skip("set ZEROTIER_GO_TEST_LIBRARY to an official native bridge")
+	}
+	n, err := New(Config{LibraryPath: path, SendWire: func(WirePacket) error { return nil }})
+	if err != nil { b.Fatal(err) }
+	defer n.Close()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		address, err := n.Address()
+		if err != nil || address == 0 {
+			b.Fatalf("native address: %x, %v", address, err)
+		}
+	}
+}
