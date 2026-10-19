@@ -31,6 +31,7 @@ type Node struct {
 	wake       chan struct{}
 	wg         sync.WaitGroup
 	drops      atomic.Uint64
+	frameDrops atomic.Uint64
 	netMu      sync.RWMutex
 	networks   map[NetworkID]NetworkConfig
 	stateErrMu sync.Mutex
@@ -77,7 +78,7 @@ func New(cfg Config) (*Node, error) {
 		activeNodes.Delete(n.token)
 		_ = api.closeHandle()
 		if code == 0 && n.handle == 0 {
-			return nil, errors.Join(errors.New("zerotier: native initialization returned a nil handle"), n.getStoreError())
+			return nil, errors.Join(errors.New("zerotier: native node returned null handle"), n.getStoreError())
 		}
 		return nil, errors.Join(nativeCallError("new", code), n.getStoreError())
 	}
@@ -255,6 +256,17 @@ func (n *Node) ProcessFrame(f Frame) error {
 	if err := f.validate(); err != nil {
 		return err
 	}
+	n.netMu.RLock()
+	config, found := n.networks[f.NetworkID]
+	n.netMu.RUnlock()
+	mtu := DefaultMTU
+	if found && config.MTU > 0 {
+		mtu = config.MTU
+	}
+	if len(f.Data) > mtu {
+		n.frameDrops.Add(1)
+		return ErrOversizedFrame
+	}
 	c := cFrame{NetworkID: uint64(f.NetworkID), SourceMAC: f.SourceMAC, DestinationMAC: f.DestinationMAC, EtherType: uint32(f.EtherType), VLAN: uint32(f.VLAN), Data: nativePacketPointer(f.Data), Length: uint32(len(f.Data))}
 	return n.withHandle("frame", func(h uintptr) (int32, int64) {
 		var due int64
@@ -277,6 +289,9 @@ func (n *Node) Network(id NetworkID) (NetworkConfig, bool) {
 	return c, true
 }
 func (n *Node) DroppedCallbacks() uint64 { return n.drops.Load() }
+
+// DroppedFrames returns outgoing frames rejected for exceeding controller MTU.
+func (n *Node) DroppedFrames() uint64 { return n.frameDrops.Load() }
 func (n *Node) Close() error {
 	var err error
 	n.closeOnce.Do(func() {

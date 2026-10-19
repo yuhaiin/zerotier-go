@@ -25,9 +25,32 @@ This is **not** a turnkey TCP/IP stack: the library purposely exports **raw Ethe
 go get github.com/yuhaiin/zerotier-go
 ```
 
-`New` first looks for an embedded binary for the current GOOS/GOARCH. Supply `Config.LibraryPath` to use a custom-built library or Android's packaged native library. Source checkouts without any built native binaries still compile, but calling `New` returns `ErrNoNativeLibrary` with the expected filename. No made-up placeholder ELF files are shipped.
+`New` embeds **only the current GOOS/GOARCH's native artifact**. For source builds the
+corresponding binary must already exist in `native/assets/`, otherwise the Go
+compiler intentionally fails. The supported release targets are Linux
+AMD64/ARM64, macOS AMD64/ARM64, Windows AMD64, and Android ARM64. Unsupported
+platforms return `ErrUnsupportedPlatform`. There are no placeholder ELF files.
 
-On Linux/macOS/Windows the **Go module** is built with `CGO_ENABLED=0`. Native `.so`/`.dylib`/`.dll` binaries are *still required* at run time, compiled from C++. **Android may and normally does enable CGO in gomobile**. Android uses a native library installed with the APK as `jniLibs/arm64-v8a/libztgo.so`, loaded by name (`Config.LibraryPath` can override). `EmbeddedLibrary` provides the platform bundle to app build tools; Android executable memory restrictions often prohibit loading from an app-writable extracted temporary `.so`.
+Native loading obeys platform security restrictions:
+
+- **macOS:** no temp extraction. Install the signed/notarized dylib beside the
+  executable or in the app's `Frameworks` / `Contents/Frameworks` folder.
+  Paths and each ancestor must not be symlinks and must have a trusted owner.
+- **Linux:** prefer a sealed, anonymous `memfd_create` buffer via
+  `/proc/self/fd/<fd>` (the fd link is an intentional kernel-managed
+  exception). If unavailable, create an exclusive `O_NOFOLLOW` file in a
+  private `~/.cache/yuhaiin/zerotier/native` directory, never in `/tmp`.
+- **Windows:** use `%LOCALAPPDATA%\yuhaiin\zerotier\<bridge version>`, an
+  unpredictable unique filename, exclusive creation and a read-only pinning
+  handle with no write sharing. Reject reparse points and untrusted owners.
+- **Android:** package `native/assets/libztgo_android_arm64.so` as
+  `jniLibs/arm64-v8a/libztgo.so` before signing. Never extract a .so to the
+  app's writable cache. gomobile may enable CGO; the shared API stays purego.
+
+The project currently ships **Android arm64-v8a only**. Android's NDK linker
+is passed `-Wl,-z,max-page-size=16384` and the CI checks every ELF `LOAD`
+segment is 16 KiB aligned using `llvm-readelf`. Do not publish other
+`abiFilters` until their binaries have been built and verified.
 
 ## Basic raw protocol example
 
@@ -81,7 +104,13 @@ go test -race ./...
 go test -run '^$' -bench . -benchmem
 ```
 
-There are source-only tests for Network ID, IP+ABI structs, state copies and persistence, controller configuration, frame validation, cancellation, and error handling. `TestNativeSmokeWhenAvailable` additionally exercises actual native creation, Join/Leave, Close, and identity persistence when `ZEROTIER_GO_TEST_LIBRARY` points to a built bridge; `BenchmarkNativeFrame` measures native packet injection. These do **not** substitute for public/private network, NAT, IPv6 and Moon interop tests.
+There are source-only tests for Network ID, IP+ABI structs, state copies and persistence, controller configuration, frame validation, cancellation, and error handling. `TestNativeSmokeWhenAvailable` additionally exercises actual native creation, Join/Leave, Close, and identity persistence when `ZEROTIER_GO_TEST_LIBRARY` points to a built bridge; `BenchmarkNativeFrame` measures native packet injection. The required `real-link` CI job starts an official ZeroTierOne controller in
+Docker, creates a private network, authorizes TWO instances of this Go library,
+checks an actual >1500-byte IPv4/ICMP Echo round trip, fully closes one node,
+restarts it with the same identity, joins again, and repeats the ping. The
+job cannot pass merely from Join/API status or a simulated UDP packet. It emits
+per-phase timings and uploads logs. Public/private NAT, IPv6 and Moon
+interoperability need separate test coverage.
 
 A previous local source-only benchmark run using an explicitly substituted purego stub for offline compilation (Linux AMD64; 100ms calibration) measured:
 
@@ -98,5 +127,11 @@ A previous local source-only benchmark run using an explicitly substituted pureg
 The native workflow pins the upstream ZeroTierOne Git revision, explicitly disables `ZT_NONFREE`, compiles the official `zerotier-core` target and links `native/bridge/ztgo.cpp` as a shared library. Only the official **MPL-2.0 Agent Core** should be distributed; **never include the nonfree controller code**. Preserve the official MPL notices and comply with corresponding-source obligations. Review runtime dependencies of generated libraries (C++ ABI, libc/NDK, code-signing).
 
 Upstream API: [ZeroTierOne.h](https://github.com/zerotier/ZeroTierOne/blob/dev/include/ZeroTierOne.h).
+
+`EthernetAdapter` provides `Encode`/`Decode`, MTU-driven capacity (`MTU+14`
+for normal L2 frames, `MTU+18` for 802.1Q), and oversized/truncated packet
+drop counters. The default MTU is 2800, updated from `NetworkConfig.MTU`.
+The core `Node` also rejects payloads exceeding the negotiated MTU and reports
+`DroppedFrames()`. TCP/IP, ARP/NDP, routing and DNS remain host-owned.
 
 `native/bridge/ztgo.h` defines the fixed-width ABI. Go's `native.go` mirrors it, with layout tests. Increment the ABI version on breaking changes. If the shared library is absent or built for another ABI version, initialization returns a descriptive error rather than attempting to call incompatible symbols.

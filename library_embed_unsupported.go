@@ -3,3 +3,5 @@
 package zerotier
 
 var bundledBytes []byte
+
+const bundledName = ""

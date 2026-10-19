@@ -1,0 +1,1 @@
+Official MPL-2.0 ZeroTierOne binary goes here, built by GitHub Actions. Do not use placeholder binaries.

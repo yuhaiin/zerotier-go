@@ -7,3 +7,9 @@ if(WIN32)
   target_link_libraries(ztgo PRIVATE ws2_32)
 endif()
 set_target_properties(ztgo PROPERTIES OUTPUT_NAME "ztgo")
+
+# Android 15+ devices can use 16 KiB virtual memory pages. Every PT_LOAD
+# segment must be aligned to 0x4000, not the old 0x1000 default.
+if(ANDROID)
+  target_link_options(ztgo PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+endif()

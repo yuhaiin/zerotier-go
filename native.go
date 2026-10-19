@@ -118,32 +118,7 @@ var nextToken atomic.Uint64
 
 func registerCallbacks() {
 	callbacksOnce.Do(func() {
-		// Windows purego uses syscall.NewCallback, which requires exactly
-		// one pointer-sized return value even for a C void callback.
-		// The C ABI ignores the result of our void callbacks.
-		callbacks = cCallbacks{
-			Put: purego.NewCallback(func(user uintptr, typ int32, id0, id1 uint64, ptr uintptr, length int32) uintptr {
-				onStatePut(user, typ, id0, id1, ptr, length)
-				return 0
-			}),
-			Get: purego.NewCallback(func(user uintptr, typ int32, id0, id1 uint64, ptr uintptr, size uint32) uintptr {
-				return uintptr(uint32(onStateGet(user, typ, id0, id1, ptr, size)))
-			}),
-			Wire: purego.NewCallback(func(user, endpoint, ptr uintptr, size, ttl uint32) uintptr {
-				return uintptr(uint32(onWireSend(user, endpoint, ptr, size, ttl)))
-			}),
-			Frame: purego.NewCallback(func(user, frame uintptr) uintptr {
-				onFrame(user, frame)
-				return 0
-			}),
-			Config: purego.NewCallback(func(user uintptr, view unsafe.Pointer) uintptr {
-				return uintptr(uint32(onConfig(user, view)))
-			}),
-			Event: purego.NewCallback(func(user uintptr, code int32) uintptr {
-				onEvent(user, code)
-				return 0
-			}),
-		}
+		callbacks = makeNativeCallbacks()
 	})
 }
 func lookup(user uintptr) *Node {
@@ -218,6 +193,17 @@ func onFrame(user, frame uintptr) {
 		return
 	}
 	f := (*cFrame)(unsafe.Pointer(frame))
+	n.netMu.RLock()
+	config, found := n.networks[NetworkID(f.NetworkID)]
+	n.netMu.RUnlock()
+	mtu := DefaultMTU
+	if found && config.MTU > 0 {
+		mtu = config.MTU
+	}
+	if f.Length > uint32(mtu) {
+		n.frameDrops.Add(1)
+		return
+	}
 	if f.Length > 1<<20 {
 		return
 	}
@@ -240,8 +226,8 @@ func onConfig(user uintptr, view unsafe.Pointer) int32 {
 	if n.offer(task{config: &cfg}) {
 		return 0
 	}
-	// A failed callback puts the native network into PORT_ERROR.
-	// Do not advertise a configuration the core rejected.
+	// Core treats a nonzero return as PORT_ERROR. Keep the visible state
+	// consistent: this update was rejected and must not be reported as ready.
 	n.netMu.Lock()
 	if existed {
 		n.networks[cfg.ID] = previous
