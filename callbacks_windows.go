@@ -2,7 +2,11 @@
 
 package zerotier
 
-import "github.com/ebitengine/purego"
+import (
+	"unsafe"
+
+	"github.com/ebitengine/purego"
+)
 
 // Windows' purego.NewCallback requires exactly one pointer-width result;
 // sign-extend INT32 results via uint32 and return the low 32 C ABI bits.
@@ -20,7 +24,7 @@ func makeNativeCallbacks() cCallbacks {
 			return uintptr(uint32(onWireSend(user, endpoint, ptr, size, ttl)))
 		}),
 		Frame:  purego.NewCallback(func(user, frame uintptr) uintptr { onFrame(user, frame); return 0 }),
-		Config: purego.NewCallback(func(user, view uintptr) uintptr { return uintptr(uint32(onConfig(user, view))) }),
+		Config: purego.NewCallback(func(user uintptr, view unsafe.Pointer) uintptr { return uintptr(uint32(onConfig(user, view))) }),
 		Event:  purego.NewCallback(func(user uintptr, code int32) uintptr { onEvent(user, code); return 0 }),
 	}
 }
