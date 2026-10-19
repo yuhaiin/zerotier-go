@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -83,7 +84,7 @@ func TestFileStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Mode().Perm() != 0600 {
+	if runtime.GOOS != "windows" && f.Mode().Perm() != 0600 {
 		t.Fatalf("unsafe permissions %v", f.Mode())
 	}
 	if err = store.Delete(key); err != nil {
