@@ -13,25 +13,18 @@ jobs:
         include:
           - runner: ubuntu-24.04
             name: libztgo_linux_amd64.so
-            optional: false
           - runner: ubuntu-24.04-arm
             name: libztgo_linux_arm64.so
-            optional: true
           - runner: macos-15
             name: libztgo_darwin_arm64.dylib
-            optional: true
           - runner: macos-15-intel
             name: libztgo_darwin_amd64.dylib
-            optional: true
           - runner: ubuntu-24.04
             name: libztgo_android_arm64.so
-            optional: true
             android: true
           - runner: windows-2022
             name: ztgo_windows_amd64.dll
-            optional: true
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.optional }}
     steps:
       - uses: actions/checkout@v4
       - name: Unpack initial source bundle when present
