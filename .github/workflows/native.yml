@@ -43,10 +43,14 @@ jobs:
           git clone --filter=blob:none https://github.com/zerotier/ZeroTierOne.git upstream
           git -C upstream checkout 899352e38405968516bb12a770f0ac02f6058fa8
           printf '\nadd_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/bridge" "${CMAKE_CURRENT_BINARY_DIR}/ztgo-bridge")\n' >> upstream/CMakeLists.txt
+      - name: Bootstrap upstream OTel headers (required by ZeroTierOne CMake)
+        shell: bash
+        run: |
+          bash upstream/scripts/bootstrap-deps.sh "$(pwd)/upstream/.deps"
       - name: Configure and compile official MPL-only core
         shell: bash
         run: |
-          cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF
+          cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF -DCMAKE_PREFIX_PATH="$(pwd)/upstream/.deps"
           cmake --build upstream-build --target ztgo --parallel 4
           mkdir -p native/assets
           find upstream-build -type f \( -name 'libztgo.so' -o -name 'libztgo.dylib' -o -name 'ztgo.dll' \) -print -exec cp {} native/assets/${{ matrix.name }} \;
