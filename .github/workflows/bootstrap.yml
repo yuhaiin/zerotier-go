@@ -1,0 +1,36 @@
+name: Publish sourced ZeroTier integration
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  actions: write
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, 'bootstrap: secure ZeroTier native integration')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Expand and commit library source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .bootstrap/patch.tar.gz
+          tar -tzf .bootstrap/patch.tar.gz | while IFS= read -r f; do
+            [[ "$f" != /* && "$f" != ../* && "$f" != */../* ]] || exit 1
+          done
+          tar -xzf .bootstrap/patch.tar.gz
+          rm .bootstrap/patch.tar.gz
+          rmdir .bootstrap 2>/dev/null || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: secure per-platform native loader, MTU and mandatory real-link CI [skip ci]'
+          git push origin HEAD:main
+      - name: Trigger native library verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run native.yml --ref main
