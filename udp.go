@@ -79,7 +79,7 @@ func (n *Node) WaitForNetwork(ctx context.Context, id NetworkID) (NetworkConfig,
 		if ok {
 			switch cfg.Status {
 			case NetworkOK:
-				if len(cfg.Addresses) > 0 {
+				if (cfg.Operation == NetworkUp || cfg.Operation == NetworkUpdated) && len(cfg.Addresses) > 0 {
 					return cfg, nil
 				}
 			case NetworkAccessDenied, NetworkNotFound, NetworkPortError, NetworkAuthenticationRequired:

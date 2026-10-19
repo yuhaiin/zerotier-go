@@ -76,6 +76,9 @@ func New(cfg Config) (*Node, error) {
 		}
 		activeNodes.Delete(n.token)
 		_ = api.closeHandle()
+		if code == 0 && n.handle == 0 {
+			return nil, errors.Join(errors.New("zerotier: native initialization returned a nil handle"), n.getStoreError())
+		}
 		return nil, errors.Join(nativeCallError("new", code), n.getStoreError())
 	}
 	n.wg.Add(2)

@@ -209,6 +209,7 @@ func onConfig(user, view uintptr) int32 {
 	}
 	cfg := (*cConfig)(unsafe.Pointer(view)).snapshot()
 	n.netMu.Lock()
+	previous, existed := n.networks[cfg.ID]
 	if cfg.Operation == NetworkDestroyed {
 		delete(n.networks, cfg.ID)
 	} else {
@@ -218,6 +219,15 @@ func onConfig(user, view uintptr) int32 {
 	if n.offer(task{config: &cfg}) {
 		return 0
 	}
+	// A failed callback puts the native network into PORT_ERROR.
+	// Do not advertise a configuration the core rejected.
+	n.netMu.Lock()
+	if existed {
+		n.networks[cfg.ID] = previous
+	} else {
+		delete(n.networks, cfg.ID)
+	}
+	n.netMu.Unlock()
 	return -1
 }
 func onEvent(user uintptr, code int32) {

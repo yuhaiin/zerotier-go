@@ -261,3 +261,71 @@ func BenchmarkNativeFrame(b *testing.B) {
 		_ = n.ProcessFrame(f)
 	}
 }
+func TestEmbeddedLibraryHasNativeFileSignature(t *testing.T) {
+	name, data, err := EmbeddedLibrary()
+	if err != nil {
+		if errors.Is(err, ErrNoNativeLibrary) {
+			t.Skip("platform's native asset has not yet been published")
+		}
+		t.Fatal(err)
+	}
+	if name != libraryName() || len(data) < 65536 {
+		t.Fatalf("invalid embedded library: %s (%d bytes)", name, len(data))
+	}
+	var ok bool
+	switch runtime.GOOS {
+	case "linux", "android":
+		ok = bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'})
+	case "windows":
+		ok = bytes.HasPrefix(data, []byte{'M', 'Z'})
+	case "darwin":
+		ok = bytes.HasPrefix(data, []byte{0xcf, 0xfa, 0xed, 0xfe}) ||
+			bytes.HasPrefix(data, []byte{0xca, 0xfe, 0xba, 0xbe})
+	default:
+		t.Skip("unsupported native platform")
+	}
+	if !ok {
+		t.Fatalf("embedded library %s does not contain expected object format", name)
+	}
+	data[0] = 0 // Returned bytes must not mutate the actual embedded data.
+	_, again, err := EmbeddedLibrary()
+	if err != nil || !okNativeHeader(again) {
+		t.Fatal("EmbeddedLibrary exposed mutable global backing memory")
+	}
+}
+func okNativeHeader(data []byte) bool {
+	if len(data) < 4 { return false }
+	switch runtime.GOOS {
+	case "linux", "android": return bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'})
+	case "windows": return bytes.HasPrefix(data, []byte{'M', 'Z'})
+	case "darwin": return bytes.HasPrefix(data, []byte{0xcf, 0xfa, 0xed, 0xfe}) || bytes.HasPrefix(data, []byte{0xca, 0xfe, 0xba, 0xbe})
+	}
+	return false
+}
+func TestRejectedConfigDoesNotBecomeReady(t *testing.T) {
+	n := &Node{done: make(chan struct{}), tasks: make(chan task), networks: make(map[NetworkID]NetworkConfig)}
+	n.token = uintptr(nextToken.Add(1))
+	activeNodes.Store(n.token, n)
+	defer activeNodes.Delete(n.token)
+	c := &cConfig{NetworkID: 123, Status: uint32(NetworkOK), Operation: uint32(NetworkUp), MTU: 2800}
+	if result := onConfig(n.token, uintptr(unsafe.Pointer(c))); result == 0 {
+		t.Fatal("accepted a config despite a full callback queue")
+	}
+	if _, ok := n.Network(123); ok {
+		t.Fatal("rejected network appeared ready")
+	}
+	if got := n.DroppedCallbacks(); got != 1 {
+		t.Fatalf("expected one drop, got %d", got)
+	}
+}
+func TestWaitForNetworkRejectsDownOperation(t *testing.T) {
+	n := &Node{done: make(chan struct{}), networks: map[NetworkID]NetworkConfig{
+		1: {ID: 1, Status: NetworkOK, Operation: NetworkDown, Addresses: []netip.Prefix{netip.MustParsePrefix("10.0.0.2/24")}},
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	_, err := n.WaitForNetwork(ctx, 1)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("down network incorrectly reported ready: %v", err)
+	}
+}
