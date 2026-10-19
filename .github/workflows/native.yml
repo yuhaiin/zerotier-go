@@ -1,0 +1,100 @@
+name: Build official native core and embed
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            name: libztgo_linux_amd64.so
+            optional: false
+          - runner: macos-15
+            name: libztgo_darwin_arm64.dylib
+            optional: true
+          - runner: windows-2022
+            name: ztgo_windows_amd64.dll
+            optional: true
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.optional }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack initial source bundle when present
+        shell: bash
+        run: |
+          if test -f .bootstrap/source.tar.gz; then tar -xzf .bootstrap/source.tar.gz; fi
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+      - name: Install CMake dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build nlohmann-json3-dev libssl-dev liblz4-dev pkg-config
+      - name: Install CMake dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja nlohmann-json
+      - name: Clone pinned official ZeroTierOne
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/zerotier/ZeroTierOne.git upstream
+          git -C upstream checkout 899352e38405968516bb12a770f0ac02f6058fa8
+          printf '\nadd_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/bridge" "${CMAKE_CURRENT_BINARY_DIR}/ztgo-bridge")\n' >> upstream/CMakeLists.txt
+      - name: Configure and compile official MPL-only core
+        shell: bash
+        run: |
+          cmake -S upstream -B upstream-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZT_NONFREE=OFF -DZT1_CENTRAL_CONTROLLER=OFF
+          cmake --build upstream-build --target ztgo --parallel 4
+          mkdir -p native/assets
+          find upstream-build -type f \( -name 'libztgo.so' -o -name 'libztgo.dylib' -o -name 'ztgo.dll' \) -print -exec cp {} native/assets/${{ matrix.name }} \;
+          test -s native/assets/${{ matrix.name }}
+      - name: Go tests and native FFI smoke
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          go mod tidy
+          go test -race ./...
+          ZEROTIER_GO_TEST_LIBRARY="$(pwd)/native/assets/${{ matrix.name }}" go test -run TestNativeSmokeWhenAvailable -v ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: native/assets/${{ matrix.name }}
+          if-no-files-found: error
+  publish:
+    needs: build
+    if: always() && needs.build.result == 'success' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Restore unpacked source
+        run: |
+          if test -f .bootstrap/source.tar.gz; then
+            tar -xzf .bootstrap/source.tar.gz
+            rm -rf .bootstrap
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: native/assets
+          merge-multiple: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+      - name: Verify code and source snapshot
+        run: |
+          go mod tidy
+          go test ./...
+          git status --short
+      - name: Commit source and verified native artifacts
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: publish source and official native bundles [skip ci]'
+            git push origin HEAD:main
+          fi
