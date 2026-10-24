@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           if test -f .bootstrap/source.tar.gz; then tar -xzf .bootstrap/source.tar.gz; fi
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25.x'
       - name: Install CMake dependencies (Ubuntu)
@@ -120,7 +120,7 @@ jobs:
         with:
           path: native/assets
           merge-multiple: true
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25.x'
       - name: Verify code and source snapshot
