@@ -26,7 +26,7 @@ jobs:
             name: ztgo_windows_amd64.dll
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Unpack initial source bundle when present
         shell: bash
         run: |
@@ -107,7 +107,7 @@ jobs:
       group: zerotier-native-publish-main
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: true
       - name: Restore unpacked source
