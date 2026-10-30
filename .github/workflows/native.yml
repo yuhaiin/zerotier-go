@@ -94,7 +94,7 @@ jobs:
           go mod tidy
           if [ "$RUNNER_OS" = Windows ]; then go test ./...; else go test -race ./...; fi
           ZEROTIER_GO_TEST_LIBRARY="$(pwd)/native/assets/${{ matrix.name }}" go test -run TestNativeSmokeWhenAvailable -v ./...
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}
           path: native/assets/${{ matrix.name }}
@@ -116,7 +116,7 @@ jobs:
             tar -xzf .bootstrap/source.tar.gz
             rm -rf .bootstrap
           fi
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: native/assets
           merge-multiple: true
