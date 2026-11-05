@@ -2,6 +2,6 @@
 
 package zerotier
 
-var bundledBytes []byte
+func readBundledLibrary() ([]byte, error) { return nil, ErrUnsupportedPlatform }
 
 const bundledName = ""

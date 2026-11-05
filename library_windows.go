@@ -49,8 +49,9 @@ func findSymbol(lib uintptr, name string) (uintptr, error) {
 }
 
 func resolvePlatformLibrary() (string, func(), error) {
-	if len(bundledBytes) == 0 {
-		return "", nil, fmt.Errorf("%w: %s", ErrNoNativeLibrary, bundledName)
+	data, err := bundledLibraryBytes()
+	if err != nil {
+		return "", nil, err
 	}
 	root := os.Getenv("LOCALAPPDATA")
 	if !filepath.IsAbs(root) {
@@ -76,7 +77,7 @@ func resolvePlatformLibrary() (string, func(), error) {
 		return "", nil, err
 	}
 	cleanup := func() { _ = os.Remove(path) }
-	if _, err = f.Write(bundledBytes); err == nil {
+	if _, err = f.Write(data); err == nil {
 		err = f.Sync()
 	}
 	if e := f.Close(); err == nil {
