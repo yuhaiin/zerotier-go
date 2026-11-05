@@ -11,6 +11,11 @@ import "embed"
 //go:embed native/assets/libztgo_linux_arm64.so
 var platformAssets embed.FS
 
-var bundledBytes, _ = platformAssets.ReadFile("native/assets/libztgo_linux_arm64.so")
+// readBundledLibrary is called only when a native node is started or
+// EmbeddedLibrary is explicitly requested. Importing this package never
+// allocates a heap copy of the embedded native library.
+func readBundledLibrary() ([]byte, error) {
+	return platformAssets.ReadFile("native/assets/libztgo_linux_arm64.so")
+}
 
 const bundledName = "libztgo_linux_arm64.so"

@@ -13,13 +13,14 @@ import (
 )
 
 func resolvePlatformLibrary() (string, func(), error) {
-	if len(bundledBytes) == 0 {
-		return "", nil, fmt.Errorf("%w: %s", ErrNoNativeLibrary, bundledName)
+	data, err := bundledLibraryBytes()
+	if err != nil {
+		return "", nil, err
 	}
-	if p, cleanup, err := sealedMemfd(bundledBytes); err == nil {
+	if p, cleanup, err := sealedMemfd(data); err == nil {
 		return p, cleanup, nil
 	}
-	return privateNativeFile(bundledBytes)
+	return privateNativeFile(data)
 }
 
 func sealedMemfd(data []byte) (string, func(), error) {
